@@ -16,6 +16,7 @@ public class CMAFull {
     public static ContestEvaluation evaluation;
     public static int evaluationLimit;
     public static double lastFitness;
+    private List<Double> fitnesses;
 
 
     private List<Individual> population;
@@ -24,8 +25,13 @@ public class CMAFull {
     private int lambda, mu;
     private double sigma, mueff, ccov, cc, mucov, cs, damps, chin;
     Matrix m, C, weights, pc, ps;
+    Matrix sqrtC, InvertSqrtC;
+    int eigeneval;
 
     public CMAFull(int newLambda, int newMu) {
+
+        fitnesses = new ArrayList<>();
+
         lambda = newLambda;
         mu = newMu;
 
@@ -70,6 +76,61 @@ public class CMAFull {
         C = Matrix.identity(n, n);
         pc = new Matrix(new double[n], n);
         ps = new Matrix(new double[n], n);
+        eigeneval = 0;
+
+    }
+
+    public CMAFull(int newLambda, int newMu, double newSigma) {
+
+        fitnesses = new ArrayList<>();
+
+        lambda = newLambda;
+        mu = newMu;
+        sigma = newSigma;
+
+        sigma = 2.5;
+        double max = 5.0;
+        double min = -5.0;
+
+        // constants and weights
+        double[] weightsDouble = new double[mu];
+        double sum = 0.0, sum2 = 0.0;
+        for (int i = 0; i < mu; i++) {
+//            weightsDouble[i] = 1.0 / mu;
+            weightsDouble[i] = Math.log(mu + 1.0) - Math.log(i + 1.0);
+            sum += weightsDouble[i];
+        }
+        for (int i = 0; i < mu; i++) {
+            weightsDouble[i] /= sum;
+            sum2 += weightsDouble[i] * weightsDouble[i];
+        }
+        weights = new Matrix(weightsDouble, mu);
+
+        mueff = 1.0 / sum2;
+
+        mucov = mueff;
+
+
+        cc = 4.0 / (n + 4.0);
+        cs = (mueff + 2.0) / (n + mueff + 3.0);
+
+        ccov = mucov / Math.pow(n, 2.0);
+
+        damps = 1.0 + 2.0 * Math.max(0.0, Math.sqrt((mueff - 1.0) / (n + 1.0)) - 1.0) + cs;
+
+        chin = Math.sqrt(n) * (1.0 - 1.0 / (4.0 * n) + 1.0 / (21.0 * Math.pow(n, 2.0)));
+
+        // vectors and matrices
+        double[] mDouble = new double[n];
+        for (int i = 0; i < n; i++) {
+            mDouble[i] = max * 2.0 * rnd.nextDouble() + min;
+        }
+        m = new Matrix(mDouble, n);
+        C = Matrix.identity(n, n);
+        pc = new Matrix(new double[n], n);
+        ps = new Matrix(new double[n], n);
+        eigeneval = 0;
+
     }
 
     private Matrix getNewIndividual(Matrix mean, Matrix c) {
@@ -84,13 +145,14 @@ public class CMAFull {
         population = new ArrayList<>();
 
         // get B and D parts from C
+
         C = triu(C);
         EigenvalueDecomposition eigenvalueDecomposition = new EigenvalueDecomposition(C);
         Matrix B = eigenvalueDecomposition.getV();
         Matrix D = eigenvalueDecomposition.getD();
         // get C^1/2 , C^(-1/2)
-        Matrix sqrtC = B.times(vecToDiag(getSqrtElementx(diagToVec(D))));
-        Matrix InvertSqrtC = B.times(vecToDiag(getInverseSqrtElementx(diagToVec(D)))).times(B.transpose());
+        sqrtC = B.times(vecToDiag(getSqrtElementx(diagToVec(D))));
+        InvertSqrtC = B.times(vecToDiag(getInverseSqrtElementx(diagToVec(D)))).times(B.transpose());
 
 
         for (int i = 0; i < lambda; i++) {
@@ -138,9 +200,12 @@ public class CMAFull {
         C = C1.plus(C2).plus(C3);
 
         sigma = sigma * Math.exp((cs / damps) * (normPs / chin - 1.0));
+
 //        System.out.println("sigma " + sigma);
 
         lastFitness = population.get(0).getFitness();
+
+        fitnesses.add(lastFitness);
 //        System.out.println(lastFitness);
         return currentCount;
     }
@@ -276,5 +341,9 @@ public class CMAFull {
 
 
         return B.times(vecToDiag(dflat).times(B.transpose()));
+    }
+
+    public List<Double> getFitnesses() {
+        return fitnesses;
     }
 }
